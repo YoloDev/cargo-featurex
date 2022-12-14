@@ -1,0 +1,52 @@
+name: Upload release binaries
+
+on:
+  workflow_call:
+    inputs:
+      release:
+        description: GitHub release
+        required: true
+        type: string
+
+  # TODO: remove
+  workflow_dispatch:
+    inputs:
+      release:
+        description: GitHub release
+        required: true
+        type: string
+
+jobs:
+  release:
+    name: Create and upload binaries to GitHub release
+    runs-on: ubuntu-latest
+    steps:
+      - id: tag
+        run: |
+          TAG_NAME="${{ inputs.release }}"
+          if [[ -z "$TAG_NAME" ]]; then
+            TAG_NAME="${{ github.event.inputs.release }}"
+          fi
+          echo tag=$TAG_NAME
+          echo ::set-output name=tag::$TAG_NAME
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v1
+
+      - name: Install cargo plugins
+        run: cargo install cargo-workspaces
+      - name: Publish
+        run: cargo workspaces publish --from-git --yes --token "${{ secrets.CRATES_IO_TOKEN }}"
+
+      # TODO: probably get creative with earthly or something
+      # - name: Upload binaries to release
+      #   uses: svenstaro/upload-release-action@v2
+      #   with:
+      #     repo_token: ${{ secrets.GITHUB_TOKEN }}
+      #     file: target/release/cargo-featurex
+      #     tag: ${{ steps.tag.outputs.tag }}
+      #     file_glob: true

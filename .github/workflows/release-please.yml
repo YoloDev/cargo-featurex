@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 jobs:
-  release-please:
+  release_please:
     runs-on: ubuntu-latest
 
     permissions:

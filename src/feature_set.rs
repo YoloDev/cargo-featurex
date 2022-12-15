@@ -1,14 +1,21 @@
-use crate::CollectResult;
-use bit_set::BitSet;
+mod bitset;
+
+use crate::{
+	metadata::{FeatureName, FeaturexMetadata},
+	CollectResult,
+};
 use cargo_metadata::Package;
-use error_stack::{report, IntoReport, ResultExt};
+use error_stack::{report, ResultExt};
 use itertools::{Itertools, Powerset};
-use serde::Deserialize;
+use lasso::{MiniSpur, Rodeo, RodeoReader};
 use std::{rc::Rc, vec};
 use thiserror::Error;
 
+type BitStorage = u64;
+type BitSet = bitset::BitSet<BitStorage>;
+
 struct FeatureInfo {
-	name: Rc<str>,
+	name: MiniSpur,
 	index: usize,
 	_direct_deps: BitSet,
 	transitive_deps: BitSet,
@@ -18,93 +25,194 @@ struct FeatureInfo {
 pub struct FeatureSet {
 	required: BitSet,
 	ignored: BitSet,
+	default: BitSet,
+	features: Vec<FeatureInfo>,
+	all: BitSet,
+	strings: Rc<RodeoReader<MiniSpur>>,
+}
+
+pub struct FeatureSetBuilder {
+	required: BitSet,
+	ignored: BitSet,
+	default: BitSet,
 	features: Vec<FeatureInfo>,
 	all: BitSet,
 }
 
-fn get_bitset(
+impl FeatureSetBuilder {
+	pub fn build(self, strings: Rc<RodeoReader<MiniSpur>>) -> FeatureSet {
+		FeatureSet {
+			required: self.required,
+			ignored: self.ignored,
+			default: self.default,
+			features: self.features,
+			all: self.all,
+			strings,
+		}
+	}
+}
+
+fn find_feature(
 	features: &[FeatureInfo],
-	names: &[String],
-) -> error_stack::Result<BitSet, FeatureSetError> {
-	let set = names
-		.iter()
-		.map(|f| {
+	name: &FeatureName,
+	strings: &Rodeo<MiniSpur>,
+) -> Option<error_stack::Result<usize, FeatureReferenceError>> {
+	match name {
+		FeatureName::Optional(n) => features.iter().find(|f| f.name == *n).map(|f| Ok(f.index)),
+		FeatureName::Required(n) => Some(
 			features
 				.iter()
-				.find(|f2| *f2.name == **f)
+				.find(|f| f.name == *n)
 				.map(|f| f.index)
-				.ok_or_else(|| report!(FeatureReferenceError { name: f.clone() }))
-		})
+				.ok_or_else(|| {
+					report!(FeatureReferenceError {
+						name: strings.resolve(n).to_owned(),
+					})
+				}),
+		),
+	}
+}
+
+fn get_bitset(
+	features: &[FeatureInfo],
+	package_names: &[FeatureName],
+	workspace_names: &[FeatureName],
+	strings: &Rodeo<MiniSpur>,
+) -> error_stack::Result<BitSet, CreateMetadataBitSetError> {
+	let from_package: Result<BitSet, _> = package_names
+		.iter()
+		.filter_map(|n| find_feature(features, n, strings))
 		.collect::<CollectResult<_, _>>()
 		.into_result()
-		.change_context(FeatureSetError)?
-		.into_iter()
-		.collect();
+		.change_context(CreateMetadataBitSetError::Package);
 
-	Ok(set)
+	let from_workspace: Result<BitSet, _> = workspace_names
+		.iter()
+		.filter_map(|n| find_feature(features, n, strings))
+		.collect::<CollectResult<_, _>>()
+		.into_result()
+		.change_context(CreateMetadataBitSetError::Workspace);
+
+	match (from_package, from_workspace) {
+		(Ok(p), Ok(w)) => Ok(p.union(w)),
+		(Err(e), Ok(_)) => Err(e),
+		(Ok(_), Err(e)) => Err(e),
+		(Err(mut e1), Err(e2)) => {
+			e1.extend_one(e2);
+			Err(e1)
+		}
+	}
 }
 
 impl FeatureSet {
-	pub(crate) fn new(package: &Package) -> error_stack::Result<FeatureSet, FeatureSetError> {
+	pub(crate) fn builder(
+		strings: &mut Rodeo<MiniSpur>,
+		package: &Package,
+		workspace_metadata: &FeaturexMetadata,
+	) -> error_stack::Result<FeatureSetBuilder, FeatureSetError> {
 		let mut all = BitSet::new();
 		let mut features: Vec<FeatureInfo> = Vec::new();
-		let mut remaining = package.features.clone();
+		let feature_names = package
+			.features
+			.iter()
+			.map(|(k, v)| (strings.get_or_intern(&**k), v))
+			.collect_vec();
+		let names = feature_names.iter().map(|(k, _)| *k).collect_vec();
+
+		let mut remaining = feature_names
+			.into_iter()
+			.map(|(k, v)| {
+				(
+					k,
+					v.iter()
+						.filter_map(|s| {
+							strings.get(&**s).and_then(|s| match names.contains(&s) {
+								true => Some(s),
+								false => None,
+							})
+						})
+						.collect_vec(),
+				)
+			})
+			.collect_vec();
 		while !remaining.is_empty() {
-			let (k, v) = remaining
+			// find feature where all dependencies are already in the set
+			let (idx, _) = remaining
 				.iter()
-				.map(|(k, v)| (&**k, &**v))
-				.find(|(_, v)| v.iter().all(|d| features.iter().any(|f| *f.name == **d)))
+				.find_position(|(_, v)| v.iter().all(|d| features.iter().any(|f| f.name == *d)))
 				.ok_or_else(|| report!(FeatureSetError))?;
 
-			let name = Rc::from(k);
+			let (name, v) = remaining.swap_remove(idx);
 			let index = features.len();
 			let mut direct_deps = BitSet::new();
 			let mut transitive_deps = BitSet::new();
-			let mut set = transitive_deps.clone();
+			let mut set = transitive_deps;
 			set.insert(index);
 
 			for dep in v {
-				if dep.starts_with("dep:") {
-					continue;
-				}
-
-				let dep = features.iter().find(|f| *f.name == **dep).unwrap();
+				let dep = features.iter().find(|f| f.name == dep).unwrap();
 				direct_deps.insert(dep.index);
-				transitive_deps.union_with(&dep.transitive_deps);
-				set.union_with(&dep.set);
+				transitive_deps.union_with(dep.transitive_deps);
+				set.union_with(dep.set);
 			}
 
 			all.insert(index);
 			features.push(FeatureInfo {
-				name: Rc::clone(&name),
+				name,
 				index,
 				_direct_deps: direct_deps,
 				transitive_deps,
 				set,
 			});
-
-			remaining.remove(&*name);
 		}
 
-		let metadata = package.metadata.get("featurex");
-		let metadata = FeaturexMetadata::new(metadata).change_context(FeatureSetError)?;
-		let required = get_bitset(&features, &metadata.required)?;
-		let ignored = get_bitset(&features, &metadata.ignored)?;
+		let metadata = FeaturexMetadata::from_metadata(&package.metadata, strings)
+			.change_context(FeatureSetError)?;
+		let required = get_bitset(
+			&features,
+			&metadata.required,
+			&workspace_metadata.required,
+			strings,
+		)
+		.change_context_lazy(|| MetadataBitSetError {
+			name: "required".into(),
+		})
+		.change_context(FeatureSetError)?;
+		let ignored = get_bitset(
+			&features,
+			&metadata.ignored,
+			&workspace_metadata.ignored,
+			strings,
+		)
+		.change_context_lazy(|| MetadataBitSetError {
+			name: "ignored".into(),
+		})
+		.change_context(FeatureSetError)?;
 
-		Ok(Self {
+		let default = match strings.get("default") {
+			None => BitSet::new(),
+			Some(default) => features
+				.iter()
+				.find(|f| f.name == default)
+				.map(|f| f.set)
+				.unwrap_or_default(),
+		};
+
+		Ok(FeatureSetBuilder {
 			required,
 			ignored,
 			features,
+			default,
 			all,
 		})
 	}
 
 	pub fn get(&self, name: &str) -> Option<Feature> {
 		self
-			.features
-			.iter()
-			.find(|f| *f.name == *name)
-			.map(|f| Feature(f, self))
+			.strings
+			.get(name)
+			.and_then(|name| self.features.iter().find(|f| f.name == name))
+			.map(|f| Feature::new(f, self))
 	}
 
 	pub fn features(&self) -> FeaturesIter {
@@ -115,15 +223,15 @@ impl FeatureSet {
 		self
 			.required
 			.iter()
-			.map(move |i| Feature(&self.features[i], self))
+			.map(move |i| Feature::new(&self.features[i], self))
 	}
 
-	pub fn permutations(&self) -> Permutaions {
-		let mut variable_set = self.all.clone();
-		variable_set.difference_with(&self.required);
-		variable_set.difference_with(&self.ignored);
+	pub fn permutations(&self) -> Permutations {
+		let mut variable_set = self.all;
+		variable_set.difference_with(self.required);
+		variable_set.difference_with(self.ignored);
 
-		Permutaions {
+		Permutations {
 			iter: variable_set.iter().collect_vec().into_iter().powerset(),
 			features: self,
 			seen: Vec::new(),
@@ -140,24 +248,26 @@ impl<'a> IntoIterator for &'a FeatureSet {
 	}
 }
 
-pub struct Feature<'a>(&'a FeatureInfo, &'a FeatureSet);
+pub struct Feature<'a> {
+	feature: &'a FeatureInfo,
+	set: &'a FeatureSet,
+}
 
 impl<'a> Feature<'a> {
+	fn new(feature: &'a FeatureInfo, set: &'a FeatureSet) -> Self {
+		Self { feature, set }
+	}
+
 	pub fn name(&self) -> &str {
-		&self.0.name
+		self.set.strings.resolve(&self.feature.name)
 	}
 
 	pub fn enabled_by_default(&self) -> bool {
-		// self.1.get("default").contains(self)
-		if let Some(default) = self.1.get("default") {
-			default.is_superset(self)
-		} else {
-			true
-		}
+		self.set.default.is_superset(self.feature.set)
 	}
 
 	pub fn is_superset(&self, other: &Feature) -> bool {
-		self.0.set.is_superset(&other.0.set)
+		self.feature.set.is_superset(other.feature.set)
 	}
 }
 
@@ -178,72 +288,47 @@ impl<'a> IntoIterator for &'a Features<'a> {
 	}
 }
 
-pub struct FeaturesIter<'a>(bit_set::Iter<'a, u32>, &'a FeatureSet);
+pub struct FeaturesIter<'a>(bitset::Bits<BitStorage>, &'a FeatureSet);
 
 impl<'a> Iterator for FeaturesIter<'a> {
 	type Item = Feature<'a>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.0.next().map(|i| Feature(&self.1.features[i], self.1))
+		self
+			.0
+			.next()
+			.map(|i| Feature::new(&self.1.features[i], self.1))
 	}
 }
 
-pub struct Permutaions<'a> {
+pub struct Permutations<'a> {
 	iter: Powerset<vec::IntoIter<usize>>,
 	features: &'a FeatureSet,
 	seen: Vec<BitSet>,
 }
 
-impl<'a> Iterator for Permutaions<'a> {
+impl<'a> Iterator for Permutations<'a> {
 	type Item = Features<'a>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		for indices in self.iter.by_ref() {
 			let mut set: BitSet = BitSet::new();
-			set.union_with(&self.features.required);
+			set.union_with(self.features.required);
 			for i in indices {
-				set.union_with(&self.features.features[i].set);
+				set.union_with(self.features.features[i].set);
 			}
 
 			if self.seen.contains(&set) {
 				continue;
 			}
 
-			self.seen.push(set.clone());
+			self.seen.push(set);
 			return Some(Features(set, self.features));
 		}
 
 		None
 	}
 }
-
-#[derive(Default, Deserialize)]
-struct FeaturexMetadata {
-	#[serde(default)]
-	required: Vec<String>,
-
-	#[serde(default)]
-	ignored: Vec<String>,
-}
-
-impl FeaturexMetadata {
-	fn new(metadata: Option<&serde_json::Value>) -> error_stack::Result<Self, FeaturexMetadataError> {
-		match metadata {
-			None => Ok(Self::default()),
-			Some(metadata) => {
-				let value: Self = serde_json::from_value(metadata.clone())
-					.into_report()
-					.change_context(FeaturexMetadataError)?;
-
-				Ok(value)
-			}
-		}
-	}
-}
-
-#[derive(Debug, Error)]
-#[error("failed to parse featurex metadata")]
-struct FeaturexMetadataError;
 
 #[derive(Debug, Error)]
 #[error("failed to produce feature set")]
@@ -252,5 +337,19 @@ pub struct FeatureSetError;
 #[derive(Debug, Error)]
 #[error("feature '{name}' not found")]
 pub struct FeatureReferenceError {
+	name: String,
+}
+
+#[derive(Debug, Error)]
+enum CreateMetadataBitSetError {
+	#[error("failed to produce feature set defined in package metadata")]
+	Package,
+	#[error("failed to produce feature set defined in workspace metadata")]
+	Workspace,
+}
+
+#[derive(Debug, Error)]
+#[error("failed to produce bitset for metadata '{name}'")]
+pub struct MetadataBitSetError {
 	name: String,
 }

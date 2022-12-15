@@ -1,13 +1,43 @@
+pub(crate) mod collect_result;
+pub(crate) mod metadata;
+
 pub mod feature_set;
 
-use cargo_metadata::{Metadata, MetadataCommand, PackageId};
+use cargo_metadata::{MetadataCommand, PackageId};
+use collect_result::CollectResult;
 use error_stack::{IntoReport, ResultExt};
-use feature_set::FeatureSet;
+use feature_set::{FeatureSet, FeatureSetBuilder};
+use itertools::Itertools;
+use lasso::{MiniSpur, Rodeo, RodeoReader};
+use metadata::FeaturexMetadata;
 use std::{
 	path::{Path, PathBuf},
 	rc::Rc,
 };
 use thiserror::Error;
+
+pub struct Workspace {
+	_strings: Rc<RodeoReader<MiniSpur>>,
+	packages: Vec<Package>,
+	root: Option<usize>,
+}
+
+impl Workspace {
+	pub fn packages(&self) -> &[Package] {
+		match self.root {
+			Some(root) => &self.packages[root..=root],
+			None => &self.packages,
+		}
+	}
+
+	pub fn all_packages(&self) -> &[Package] {
+		&self.packages
+	}
+
+	pub fn root(&self) -> Option<&Package> {
+		self.root.map(|i| &self.packages[i])
+	}
+}
 
 pub struct Package {
 	pub name: String,
@@ -16,14 +46,34 @@ pub struct Package {
 	pub features: FeatureSet,
 }
 
-impl Package {
-	fn new(
-		package: &cargo_metadata::Package,
-		_metadata: Rc<Metadata>,
-	) -> error_stack::Result<Self, PackageError> {
-		let features = FeatureSet::new(package).change_context_lazy(|| PackageError::new(package))?;
+struct PackageBuilder {
+	name: String,
+	id: PackageId,
+	manifest_path: PathBuf,
+	features: FeatureSetBuilder,
+}
 
-		Ok(Self {
+impl PackageBuilder {
+	fn build(self, strings: Rc<RodeoReader<MiniSpur>>) -> Package {
+		Package {
+			name: self.name,
+			id: self.id,
+			manifest_path: self.manifest_path,
+			features: self.features.build(strings),
+		}
+	}
+}
+
+impl Package {
+	fn builder(
+		strings: &mut Rodeo<MiniSpur>,
+		package: &cargo_metadata::Package,
+		metadata: &FeaturexMetadata,
+	) -> error_stack::Result<PackageBuilder, PackageError> {
+		let features = FeatureSet::builder(strings, package, metadata)
+			.change_context_lazy(|| PackageError::new(package))?;
+
+		Ok(PackageBuilder {
 			name: package.name.clone(),
 			id: package.id.clone(),
 			manifest_path: package.manifest_path.clone().into(),
@@ -37,8 +87,8 @@ impl Package {
 }
 
 #[derive(Debug, Error)]
-#[error("failed to get packages")]
-pub struct GetPackagesError;
+#[error("failed to get workspace")]
+pub struct GetWorkspaceError;
 
 #[derive(Debug, Error)]
 #[error("failed to get package {package_id}")]
@@ -54,43 +104,9 @@ impl PackageError {
 	}
 }
 
-enum CollectResult<T, E> {
-	Ok(Vec<T>),
-	Err(error_stack::Report<E>),
-}
-
-impl<T, E> CollectResult<T, E> {
-	fn into_result(self) -> error_stack::Result<Vec<T>, E> {
-		match self {
-			Self::Ok(vec) => Ok(vec),
-			Self::Err(report) => Err(report),
-		}
-	}
-}
-
-impl<T, E> FromIterator<error_stack::Result<T, E>> for CollectResult<T, E> {
-	fn from_iter<I: IntoIterator<Item = error_stack::Result<T, E>>>(iter: I) -> Self {
-		let mut iter = iter.into_iter();
-		let mut vec = Vec::with_capacity(iter.size_hint().0);
-
-		while let Some(item) = iter.next() {
-			match item {
-				Ok(item) => vec.push(item),
-				Err(mut report) => {
-					report.extend(iter.filter_map(Result::err));
-
-					return Self::Err(report);
-				}
-			}
-		}
-
-		Self::Ok(vec)
-	}
-}
-
-pub fn packages(
+pub fn workspace(
 	manifest_path: Option<&Path>,
-) -> error_stack::Result<Vec<Package>, GetPackagesError> {
+) -> error_stack::Result<Workspace, GetWorkspaceError> {
 	let mut metadata = MetadataCommand::new();
 	if let Some(manifest_path) = manifest_path {
 		metadata.manifest_path(manifest_path);
@@ -99,24 +115,47 @@ pub fn packages(
 	let metadata = metadata
 		.exec()
 		.into_report()
-		.change_context(GetPackagesError)?;
+		.change_context(GetWorkspaceError)?;
 
 	let metadata = Rc::new(metadata);
+	let mut strings = Rodeo::new();
+	let workspace_metadata =
+		FeaturexMetadata::from_metadata(&metadata.workspace_metadata, &mut strings)
+			.change_context(GetWorkspaceError)?;
 
 	let packages = metadata
 		.packages
 		.iter()
-		.filter({
-			let metadata = metadata.clone();
-			move |pkg| metadata.workspace_members.contains(&pkg.id)
+		.filter_map(|pkg| {
+			metadata
+				.workspace_members
+				.contains(&pkg.id)
+				.then(|| Package::builder(&mut strings, pkg, &workspace_metadata))
 		})
-		.map({
-			let metadata = metadata.clone();
-			move |pkg| Package::new(pkg, metadata.clone())
-		})
-		.collect::<CollectResult<_, _>>()
+		.collect::<CollectResult<Vec<_>, _>>()
 		.into_result()
-		.change_context(GetPackagesError)?;
+		.change_context(GetWorkspaceError)?;
 
-	Ok(packages)
+	let strings = Rc::new(strings.into_reader());
+	let packages = packages
+		.into_iter()
+		.map({
+			let strings = Rc::clone(&strings);
+			move |pkg| pkg.build(Rc::clone(&strings))
+		})
+		.collect_vec();
+
+	let root = metadata.root_package().map(|p| {
+		packages
+			.iter()
+			.find_position(|pkg| pkg.id == p.id)
+			.unwrap()
+			.0
+	});
+
+	Ok(Workspace {
+		_strings: strings,
+		packages,
+		root,
+	})
 }

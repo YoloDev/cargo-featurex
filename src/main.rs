@@ -1,4 +1,4 @@
-use cargo_featurex::{feature_set::Features, packages, Package};
+use cargo_featurex::{feature_set::Features, workspace, Package, Workspace};
 use clap::Parser;
 use error_stack::{IntoReport, ResultExt};
 use itertools::Itertools;
@@ -42,18 +42,18 @@ fn main() -> error_stack::Result<(), FeaturexError> {
 	let Cargo::Featurex(args) = Cargo::parse();
 	let stdout = StandardStream::stdout(ColorChoice::Auto);
 
-	let packages = packages(args.manifest_path.as_deref()).change_context(FeaturexError)?;
+	let workspace = workspace(args.manifest_path.as_deref()).change_context(FeaturexError)?;
 	match args.subcommand {
-		None => print_permutations(packages),
-		Some(Subcommand::Check) => run_permutations(packages, "check", stdout),
-		Some(Subcommand::Test) => run_permutations(packages, "test", stdout),
-		Some(Subcommand::Clippy) => run_permutations(packages, "clippy", stdout),
-		Some(Subcommand::Build) => run_permutations(packages, "build", stdout),
+		None => print_permutations(workspace),
+		Some(Subcommand::Check) => run_permutations(workspace, "check", stdout),
+		Some(Subcommand::Test) => run_permutations(workspace, "test", stdout),
+		Some(Subcommand::Clippy) => run_permutations(workspace, "clippy", stdout),
+		Some(Subcommand::Build) => run_permutations(workspace, "build", stdout),
 	}
 }
 
-fn print_permutations(packages: Vec<Package>) -> error_stack::Result<(), FeaturexError> {
-	for pkg in packages {
+fn print_permutations(workspace: Workspace) -> error_stack::Result<(), FeaturexError> {
+	for pkg in workspace.packages() {
 		for permutation in pkg.features.permutations() {
 			let features = permutation
 				.into_iter()
@@ -68,13 +68,13 @@ fn print_permutations(packages: Vec<Package>) -> error_stack::Result<(), Feature
 }
 
 fn run_permutations(
-	packages: Vec<Package>,
+	workspace: Workspace,
 	command: &str,
 	mut out: StandardStream,
 ) -> error_stack::Result<(), FeaturexError> {
-	for pkg in packages {
+	for pkg in workspace.packages() {
 		for permutation in pkg.features.permutations() {
-			run(&pkg, permutation, command, &mut out)?;
+			run(pkg, permutation, command, &mut out)?;
 		}
 	}
 

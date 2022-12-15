@@ -29,7 +29,11 @@
 					"kind": "bin"
 				}
 			},
-			"args": ["featurex"],
+			"args": [
+				"featurex",
+				"--manifest-path",
+				"../hass-rs/crates/mqtt-provider/Cargo.toml"
+			],
 			"cwd": "${workspaceFolder}"
 		},
 		{

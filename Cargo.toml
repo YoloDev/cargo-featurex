@@ -1,6 +1,6 @@
 [package]
 name = "cargo-featurex"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 description = "cargo plugin to run tasks against feature powersets"
 license = "MIT"

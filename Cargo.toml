@@ -11,7 +11,7 @@ repository = "https://github.com/YoloDev/cargo-featurex"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bytemuck = { version = "1.12.3", features = ["min_const_generics"] }
+bytemuck = { version = "1.13.0", features = ["min_const_generics"] }
 cargo_metadata = "0.15.2"
 clap = { version = "4.1.1", features = ["derive"] }
 error-stack = "0.2.4"

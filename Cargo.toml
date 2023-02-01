@@ -14,7 +14,7 @@ repository = "https://github.com/YoloDev/cargo-featurex"
 bytemuck = { version = "1.13.0", features = ["min_const_generics"] }
 cargo_metadata = "0.15.3"
 clap = { version = "4.1.4", features = ["derive"] }
-error-stack = "0.2.4"
+error-stack = "0.3.0"
 itertools = "0.10.5"
 lasso = { version = "0.6.0", features = ["ahasher"] }
 serde = { version = "1.0.152", features = ["derive"] }

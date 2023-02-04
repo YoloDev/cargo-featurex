@@ -21,9 +21,9 @@ checksum = "216261ddc8289130e551ddcd5ce8a064710c0d064a4d2895c67151c92b5443f6"
 
 [[package]]
 name = "bitarr"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0f67accd3de20385827c5263c5e14240b0bda6515448170dde37095f31593a7"
+checksum = "892f61d9868de8aa1ef613e44f073cd5355e130f0a3fdbc21fdb5a06c5a9fa08"
 
 [[package]]
 name = "bitflags"

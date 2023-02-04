@@ -1,5 +1,3 @@
-mod bitset;
-
 use crate::{
 	metadata::{FeatureName, FeaturexMetadata},
 	CollectResult,
@@ -12,11 +10,11 @@ use std::{rc::Rc, vec};
 use thiserror::Error;
 
 type BitStorage = u64;
-type BitSet = bitset::BitSet<BitStorage>;
+type BitSet = bitarr::BitSet<BitStorage>;
 
 struct FeatureInfo {
 	name: MiniSpur,
-	index: usize,
+	index: u32,
 	_direct_deps: BitSet,
 	transitive_deps: BitSet,
 	set: BitSet,
@@ -56,7 +54,7 @@ fn find_feature(
 	features: &[FeatureInfo],
 	name: &FeatureName,
 	strings: &Rodeo<MiniSpur>,
-) -> Option<error_stack::Result<usize, FeatureReferenceError>> {
+) -> Option<error_stack::Result<u32, FeatureReferenceError>> {
 	match name {
 		FeatureName::Optional(n) => features.iter().find(|f| f.name == *n).map(|f| Ok(f.index)),
 		FeatureName::Required(n) => Some(
@@ -94,7 +92,7 @@ fn get_bitset(
 		.change_context(CreateMetadataBitSetError::Workspace);
 
 	match (from_package, from_workspace) {
-		(Ok(p), Ok(w)) => Ok(p.union(w)),
+		(Ok(p), Ok(w)) => Ok(p.union(&w)),
 		(Err(e), Ok(_)) => Err(e),
 		(Ok(_), Err(e)) => Err(e),
 		(Err(mut e1), Err(e2)) => {
@@ -143,20 +141,20 @@ impl FeatureSet {
 				.ok_or_else(|| report!(FeatureSetError))?;
 
 			let (name, v) = remaining.swap_remove(idx);
-			let index = features.len();
+			let index = features.len() as u32;
 			let mut direct_deps = BitSet::new();
 			let mut transitive_deps = BitSet::new();
 			let mut set = transitive_deps;
-			set.insert(index);
+			set.set(index);
 
 			for dep in v {
 				let dep = features.iter().find(|f| f.name == dep).unwrap();
-				direct_deps.insert(dep.index);
-				transitive_deps.union_with(dep.transitive_deps);
-				set.union_with(dep.set);
+				direct_deps.set(dep.index);
+				transitive_deps.union_with(&dep.transitive_deps);
+				set.union_with(&dep.set);
 			}
 
-			all.insert(index);
+			all.set(index);
 			features.push(FeatureInfo {
 				name,
 				index,
@@ -216,23 +214,30 @@ impl FeatureSet {
 	}
 
 	pub fn features(&self) -> FeaturesIter {
-		FeaturesIter(self.all.into_iter(), self)
+		FeaturesIter(self.all.iter().enumerate(), self)
 	}
 
 	pub fn required(&self) -> impl Iterator<Item = Feature> + '_ {
 		self
 			.required
 			.iter()
-			.map(move |i| Feature::new(&self.features[i], self))
+			.enumerate()
+			.filter_map(|(i, b)| b.then(|| Feature::new(&self.features[i], self)))
 	}
 
 	pub fn permutations(&self) -> Permutations {
 		let mut variable_set = self.all;
-		variable_set.difference_with(self.required);
-		variable_set.difference_with(self.ignored);
+		variable_set.difference_with(&self.required);
+		variable_set.difference_with(&self.ignored);
 
 		Permutations {
-			iter: variable_set.iter().collect_vec().into_iter().powerset(),
+			iter: variable_set
+				.iter()
+				.enumerate()
+				.filter_map(|(i, b)| b.then_some(i))
+				.collect_vec()
+				.into_iter()
+				.powerset(),
 			features: self,
 			seen: Vec::new(),
 		}
@@ -263,11 +268,11 @@ impl<'a> Feature<'a> {
 	}
 
 	pub fn enabled_by_default(&self) -> bool {
-		self.set.default.is_superset(self.feature.set)
+		self.set.default.is_superset(&self.feature.set)
 	}
 
 	pub fn is_superset(&self, other: &Feature) -> bool {
-		self.feature.set.is_superset(other.feature.set)
+		self.feature.set.is_superset(&other.feature.set)
 	}
 }
 
@@ -275,7 +280,7 @@ pub struct Features<'a>(BitSet, &'a FeatureSet);
 
 impl<'a> Features<'a> {
 	pub fn iter(&self) -> FeaturesIter {
-		FeaturesIter(self.0.iter(), self.1)
+		FeaturesIter(self.0.iter().enumerate(), self.1)
 	}
 }
 
@@ -288,16 +293,22 @@ impl<'a> IntoIterator for &'a Features<'a> {
 	}
 }
 
-pub struct FeaturesIter<'a>(bitset::Bits<BitStorage>, &'a FeatureSet);
+pub struct FeaturesIter<'a>(
+	std::iter::Enumerate<bitarr::iter::Bits<&'a BitStorage>>,
+	&'a FeatureSet,
+);
 
 impl<'a> Iterator for FeaturesIter<'a> {
 	type Item = Feature<'a>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self
-			.0
-			.next()
-			.map(|i| Feature::new(&self.1.features[i], self.1))
+		for (i, b) in &mut self.0 {
+			if b {
+				return Some(Feature::new(&self.1.features[i], self.1));
+			}
+		}
+
+		None
 	}
 }
 
@@ -313,9 +324,9 @@ impl<'a> Iterator for Permutations<'a> {
 	fn next(&mut self) -> Option<Self::Item> {
 		for indices in self.iter.by_ref() {
 			let mut set: BitSet = BitSet::new();
-			set.union_with(self.features.required);
+			set.union_with(&self.features.required);
 			for i in indices {
-				set.union_with(self.features.features[i].set);
+				set.union_with(&self.features.features[i].set);
 			}
 
 			if self.seen.contains(&set) {

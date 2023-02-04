@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/YoloDev/cargo-featurex/compare/cargo-featurex-v0.1.4...cargo-featurex-v0.1.5) (2023-02-04)
+
+
+### Dependencies
+
+* update bitarr ([9e71ac2](https://github.com/YoloDev/cargo-featurex/commit/9e71ac292ecb82d53f53f52ffbda71a19a796918))
+
 ## [0.1.4](https://github.com/YoloDev/cargo-featurex/compare/cargo-featurex-v0.1.3...cargo-featurex-v0.1.4) (2023-02-04)
 
 

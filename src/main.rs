@@ -2,6 +2,7 @@ use cargo_featurex::{feature_set::Features, workspace, Package, Workspace};
 use clap::Parser;
 use error_stack::{IntoReport, ResultExt};
 use itertools::Itertools;
+use serde_json::{json, Value};
 use std::{
 	io::Write,
 	process::{Command, Stdio},
@@ -28,6 +29,7 @@ struct Featurex {
 
 #[derive(clap::Subcommand, Debug)]
 enum Subcommand {
+	Json,
 	Test,
 	Check,
 	Clippy,
@@ -45,6 +47,7 @@ fn main() -> error_stack::Result<(), FeaturexError> {
 	let workspace = workspace(args.manifest_path.as_deref()).change_context(FeaturexError)?;
 	match args.subcommand {
 		None => print_permutations(workspace),
+		Some(Subcommand::Json) => print_permutations_json(workspace),
 		Some(Subcommand::Check) => run_permutations(workspace, "check", stdout),
 		Some(Subcommand::Test) => run_permutations(workspace, "test", stdout),
 		Some(Subcommand::Clippy) => run_permutations(workspace, "clippy", stdout),
@@ -64,6 +67,47 @@ fn print_permutations(workspace: Workspace) -> error_stack::Result<(), FeaturexE
 		}
 	}
 
+	Ok(())
+}
+
+fn print_permutations_json(workspace: Workspace) -> error_stack::Result<(), FeaturexError> {
+	let packages = workspace
+		.packages()
+		.iter()
+		.map(|pkg| {
+			let feautres = pkg
+				.features
+				.features()
+				.map(|f| Value::from(f.name()))
+				.collect::<Value>();
+			let permutations = pkg
+				.features
+				.permutations()
+				.map(|p| {
+					p.into_iter()
+						.map(|f| Value::from(f.name()))
+						.collect::<Value>()
+				})
+				.collect::<Value>();
+
+			json!({
+				"id": pkg.id(),
+				"name": pkg.name(),
+				"version": pkg.version(),
+				"manifest_path": pkg.manifest_path(),
+				"features": {
+					"all": feautres,
+					"permutations": permutations,
+				}
+			})
+		})
+		.collect::<Value>();
+
+	let json = json!({
+		"packages": packages,
+	});
+
+	println!("{}", json);
 	Ok(())
 }
 

@@ -41,13 +41,33 @@ impl Workspace {
 
 pub struct Package {
 	pub name: String,
+	pub version: String,
 	pub id: PackageId,
 	pub manifest_path: PathBuf,
 	pub features: FeatureSet,
 }
 
+impl Package {
+	pub fn id(&self) -> &str {
+		&self.id.repr
+	}
+
+	pub fn name(&self) -> &str {
+		&self.name
+	}
+
+	pub fn version(&self) -> &str {
+		&self.version
+	}
+
+	pub fn manifest_path(&self) -> &Path {
+		&self.manifest_path
+	}
+}
+
 struct PackageBuilder {
 	name: String,
+	version: String,
 	id: PackageId,
 	manifest_path: PathBuf,
 	features: FeatureSetBuilder,
@@ -57,6 +77,7 @@ impl PackageBuilder {
 	fn build(self, strings: Rc<RodeoReader<MiniSpur>>) -> Package {
 		Package {
 			name: self.name,
+			version: self.version,
 			id: self.id,
 			manifest_path: self.manifest_path,
 			features: self.features.build(strings),
@@ -75,14 +96,11 @@ impl Package {
 
 		Ok(PackageBuilder {
 			name: package.name.clone(),
+			version: package.version.to_string(),
 			id: package.id.clone(),
 			manifest_path: package.manifest_path.clone().into(),
 			features,
 		})
-	}
-
-	pub fn manifest_path(&self) -> &Path {
-		&self.manifest_path
 	}
 }
 

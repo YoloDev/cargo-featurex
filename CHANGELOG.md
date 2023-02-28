@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.6](https://github.com/YoloDev/cargo-featurex/compare/cargo-featurex-v0.1.5...cargo-featurex-v0.1.6) (2023-02-28)
+
+
+### Dependencies
+
+* update rust crate clap to 4.1.6 ([#26](https://github.com/YoloDev/cargo-featurex/issues/26)) ([5368c00](https://github.com/YoloDev/cargo-featurex/commit/5368c0071466b96af50db7b7dff896270c30605a))
+* update rust crate clap to 4.1.7 ([#27](https://github.com/YoloDev/cargo-featurex/issues/27)) ([277330f](https://github.com/YoloDev/cargo-featurex/commit/277330f89ed2721ae7dce4fed40118afaa00c143))
+* update rust crate clap to 4.1.8 ([#28](https://github.com/YoloDev/cargo-featurex/issues/28)) ([df1291b](https://github.com/YoloDev/cargo-featurex/commit/df1291b0e034e1d0b68b8afa59c9061573e11deb))
+* update rust crate error-stack to 0.3.1 ([#24](https://github.com/YoloDev/cargo-featurex/issues/24)) ([e4eb3e8](https://github.com/YoloDev/cargo-featurex/commit/e4eb3e852dd91592b4ac08f32080ec80021ab2ec))
+* update rust crate serde_json to 1.0.92 ([#22](https://github.com/YoloDev/cargo-featurex/issues/22)) ([e8d45a3](https://github.com/YoloDev/cargo-featurex/commit/e8d45a32809beb3d80a4e8aff2be340a5828b927))
+* update rust crate serde_json to 1.0.93 ([#25](https://github.com/YoloDev/cargo-featurex/issues/25)) ([34f53f5](https://github.com/YoloDev/cargo-featurex/commit/34f53f59bfb83802f1400db451cf4698261f8b2c))
+
 ## [0.1.5](https://github.com/YoloDev/cargo-featurex/compare/cargo-featurex-v0.1.4...cargo-featurex-v0.1.5) (2023-02-04)
 
 

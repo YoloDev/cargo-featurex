@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/YoloDev/cargo-featurex/compare/cargo-featurex-v0.1.6...cargo-featurex-v0.1.7) (2023-02-28)
+
+
+### Features
+
+* add json subcommand ([3784e77](https://github.com/YoloDev/cargo-featurex/commit/3784e7754d20f24ee5c6e603f4a067f0065550f7))
+
 ## [0.1.6](https://github.com/YoloDev/cargo-featurex/compare/cargo-featurex-v0.1.5...cargo-featurex-v0.1.6) (2023-02-28)
 
 

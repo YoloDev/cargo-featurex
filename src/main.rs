@@ -136,6 +136,7 @@ fn run(
 		.arg(command)
 		.arg("--manifest-path")
 		.arg(pkg.manifest_path())
+		.arg("--no-default-features")
 		.arg("--features")
 		.arg(features.iter().map(|f| f.name().to_owned()).join(","))
 		.stdin(Stdio::inherit())

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.11](https://github.com/YoloDev/cargo-featurex/compare/cargo-featurex-v0.1.10...cargo-featurex-v0.1.11) (2023-04-06)
+
+
+### Bug Fixes
+
+* better errors ([d5f6bb2](https://github.com/YoloDev/cargo-featurex/commit/d5f6bb24aa72e530915941e6206704050bb8acbb))
+* fail on process failure ([cdd07f3](https://github.com/YoloDev/cargo-featurex/commit/cdd07f3f7b93f94cb81efcc057d041db241ec499))
+
 ## [0.1.10](https://github.com/YoloDev/cargo-featurex/compare/cargo-featurex-v0.1.9...cargo-featurex-v0.1.10) (2023-04-05)
 
 

@@ -82,7 +82,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-featurex"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "bitarr",
  "cargo_metadata",

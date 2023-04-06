@@ -1,6 +1,6 @@
 use cargo_featurex::{feature_set::Features, workspace, Package, Workspace};
 use clap::Parser;
-use error_stack::{IntoReport, ResultExt};
+use error_stack::{ensure, IntoReport, ResultExt};
 use itertools::Itertools;
 use serde_json::{json, Value};
 use std::{
@@ -125,12 +125,24 @@ fn run_permutations(
 	Ok(())
 }
 
+#[derive(Debug, Error)]
+enum RunError {
+	#[error("failed to print logs")]
+	LogError,
+
+	#[error("process falied to start")]
+	StartProcess,
+
+	#[error("process failed with status code: {0}")]
+	ProcessFailed(i32),
+}
+
 fn run(
 	pkg: &Package,
 	features: Features,
 	command: &str,
 	out: &mut StandardStream,
-) -> error_stack::Result<(), FeaturexError> {
+) -> error_stack::Result<(), RunError> {
 	let mut cmd = Command::new("cargo");
 	cmd
 		.arg(command)
@@ -148,15 +160,24 @@ fn run(
 	out
 		.set_color(ColorSpec::new().set_fg(Some(Color::Magenta)))
 		.into_report()
-		.change_context(FeaturexError)?;
+		.change_context(RunError::LogError)?;
 	writeln!(out, "    ========== {}[{}] ==========", pkg.name, features)
 		.into_report()
-		.change_context(FeaturexError)?;
-	out.reset().into_report().change_context(FeaturexError)?;
-
-	cmd
-		.output()
-		.map(|_| ())
+		.change_context(RunError::LogError)?;
+	out
+		.reset()
 		.into_report()
-		.change_context(FeaturexError)
+		.change_context(RunError::LogError)?;
+
+	let result = cmd
+		.output()
+		.into_report()
+		.change_context(RunError::StartProcess)?;
+
+	ensure!(
+		result.status.success(),
+		RunError::ProcessFailed(result.status.code().unwrap_or(-1))
+	);
+
+	Ok(())
 }

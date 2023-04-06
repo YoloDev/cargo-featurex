@@ -130,7 +130,7 @@ impl fmt::Display for PermutationError {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(
 			f,
-			"failed to run permutation for package {} with features: {}",
+			"failed to run permutation for package {} with features: [{}]",
 			self.package.name,
 			self.features.join(", ")
 		)

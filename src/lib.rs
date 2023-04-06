@@ -39,6 +39,13 @@ impl Workspace {
 	}
 }
 
+#[derive(Debug)]
+pub struct PackageInfo {
+	pub name: String,
+	pub version: String,
+	pub id: PackageId,
+}
+
 pub struct Package {
 	pub name: String,
 	pub version: String,
@@ -62,6 +69,14 @@ impl Package {
 
 	pub fn manifest_path(&self) -> &Path {
 		&self.manifest_path
+	}
+
+	pub fn info(&self) -> PackageInfo {
+		PackageInfo {
+			name: self.name.clone(),
+			version: self.version.clone(),
+			id: self.id.clone(),
+		}
 	}
 }
 

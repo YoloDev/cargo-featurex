@@ -1,5 +1,6 @@
-use cargo_featurex::{feature_set::Features, workspace, Package, Workspace};
+use cargo_featurex::{feature_set::Features, workspace, Package, PackageInfo, Workspace};
 use clap::Parser;
+use core::fmt;
 use error_stack::{ensure, IntoReport, ResultExt};
 use itertools::Itertools;
 use serde_json::{json, Value};
@@ -48,10 +49,18 @@ fn main() -> error_stack::Result<(), FeaturexError> {
 	match args.subcommand {
 		None => print_permutations(workspace),
 		Some(Subcommand::Json) => print_permutations_json(workspace),
-		Some(Subcommand::Check) => run_permutations(workspace, "check", stdout),
-		Some(Subcommand::Test) => run_permutations(workspace, "test", stdout),
-		Some(Subcommand::Clippy) => run_permutations(workspace, "clippy", stdout),
-		Some(Subcommand::Build) => run_permutations(workspace, "build", stdout),
+		Some(Subcommand::Check) => {
+			run_permutations(workspace, "check", stdout).change_context(FeaturexError)
+		}
+		Some(Subcommand::Test) => {
+			run_permutations(workspace, "test", stdout).change_context(FeaturexError)
+		}
+		Some(Subcommand::Clippy) => {
+			run_permutations(workspace, "clippy", stdout).change_context(FeaturexError)
+		}
+		Some(Subcommand::Build) => {
+			run_permutations(workspace, "build", stdout).change_context(FeaturexError)
+		}
 	}
 }
 
@@ -111,14 +120,34 @@ fn print_permutations_json(workspace: Workspace) -> error_stack::Result<(), Feat
 	Ok(())
 }
 
+#[derive(Debug, Error)]
+struct PermutationError {
+	package: PackageInfo,
+	features: Vec<String>,
+}
+
+impl fmt::Display for PermutationError {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(
+			f,
+			"failed to run permutation for package {} with features: {}",
+			self.package.name,
+			self.features.join(", ")
+		)
+	}
+}
+
 fn run_permutations(
 	workspace: Workspace,
 	command: &str,
 	mut out: StandardStream,
-) -> error_stack::Result<(), FeaturexError> {
+) -> error_stack::Result<(), PermutationError> {
 	for pkg in workspace.packages() {
 		for permutation in pkg.features.permutations() {
-			run(pkg, permutation, command, &mut out)?;
+			run(pkg, &permutation, command, &mut out).change_context_lazy(|| PermutationError {
+				package: pkg.info(),
+				features: permutation.iter().map(|f| f.name().to_owned()).collect(),
+			})?;
 		}
 	}
 
@@ -139,7 +168,7 @@ enum RunError {
 
 fn run(
 	pkg: &Package,
-	features: Features,
+	features: &Features,
 	command: &str,
 	out: &mut StandardStream,
 ) -> error_stack::Result<(), RunError> {

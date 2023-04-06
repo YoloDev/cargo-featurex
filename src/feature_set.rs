@@ -6,12 +6,13 @@ use cargo_metadata::Package;
 use error_stack::{report, ResultExt};
 use itertools::{Itertools, Powerset};
 use lasso::{MiniSpur, Rodeo, RodeoReader};
-use std::{rc::Rc, vec};
+use std::{fmt, rc::Rc, vec};
 use thiserror::Error;
 
 type BitStorage = u64;
 type BitSet = bitarr::BitSet<BitStorage>;
 
+#[derive(Clone)]
 struct FeatureInfo {
 	name: MiniSpur,
 	index: u32,
@@ -20,6 +21,7 @@ struct FeatureInfo {
 	set: BitSet,
 }
 
+#[derive(Clone)]
 pub struct FeatureSet {
 	required: BitSet,
 	ignored: BitSet,
@@ -27,6 +29,24 @@ pub struct FeatureSet {
 	features: Vec<FeatureInfo>,
 	all: BitSet,
 	strings: Rc<RodeoReader<MiniSpur>>,
+}
+
+impl fmt::Debug for FeatureSet {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		struct DebugFeatures<'a>(&'a [FeatureInfo], &'a RodeoReader<MiniSpur>);
+
+		impl<'a> fmt::Debug for DebugFeatures<'a> {
+			fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+				f.debug_list()
+					.entries(self.0.iter().map(|f| self.1.resolve(&f.name)))
+					.finish()
+			}
+		}
+
+		f.debug_struct("FeatureSet")
+			.field("features", &DebugFeatures(&self.features, &self.strings))
+			.finish_non_exhaustive()
+	}
 }
 
 pub struct FeatureSetBuilder {

@@ -13,7 +13,7 @@ repository = "https://github.com/YoloDev/cargo-featurex"
 [dependencies]
 bitarr = "0.2.0"
 cargo_metadata = "0.15.4"
-clap = { version = "4.2.7", features = ["derive"] }
+clap = { version = "4.3.0", features = ["derive"] }
 error-stack = "0.3.1"
 itertools = "0.10.5"
 lasso = { version = "0.7.2", features = ["ahasher"] }

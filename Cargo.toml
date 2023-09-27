@@ -20,4 +20,4 @@ lasso = { version = "0.7.2", features = ["ahasher"] }
 serde = { version = "1.0.188", features = ["derive"] }
 serde_json = { version = "1.0.107" }
 termcolor = "1.3.0"
-thiserror = "1.0.48"
+thiserror = "1.0.49"

@@ -82,6 +82,13 @@
 
         cargoArtifacts = craneLib.buildDepsOnly commonArgs;
 
+        cargo-featurex = craneLib.buildPackage (
+          commonArgs
+          // {
+            inherit cargoArtifacts;
+          }
+        );
+
         pre-commit-check = preCommitHooksLib.run {
           src = ./.;
           hooks = {
@@ -102,6 +109,8 @@
       in
       rec {
         checks = {
+          inherit cargo-featurex;
+
           # Run clippy (and deny all warnings) on the workspace source,
           # again, reusing the dependency artifacts from above.
           #
@@ -120,6 +129,20 @@
           workspace-fmt = craneLib.cargoFmt {
             inherit src;
           };
+        };
+
+        packages = rec {
+          inherit cargo-featurex;
+
+          default = cargo-featurex;
+        };
+
+        apps = rec {
+          cargo-featurex = flake-utils.lib.mkApp {
+            drv = cargo-featurex;
+          };
+
+          default = cargo-featurex;
         };
 
         devShells.default = craneLib.devShell {

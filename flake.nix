@@ -65,15 +65,12 @@
           strictDeps = true;
 
           nativeBuildInputs = with pkgs; [
-            cmake
-            pkg-config
           ];
 
           buildInputs =
             with pkgs;
             [
               # Add additional build inputs here
-              openssl
             ]
             ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
               # Additional darwin specific inputs can be set here
@@ -129,20 +126,24 @@
           workspace-fmt = craneLib.cargoFmt {
             inherit src;
           };
+
+          devShell-with-featurex = craneLib.devShell {
+            packages = [ packages.cargo-featurex ];
+          };
         };
 
-        packages = rec {
+        packages = {
           inherit cargo-featurex;
 
-          default = cargo-featurex;
+          default = packages.cargo-featurex;
         };
 
-        apps = rec {
+        apps = {
           cargo-featurex = flake-utils.lib.mkApp {
             drv = cargo-featurex;
           };
 
-          default = cargo-featurex;
+          default = apps.cargo-featurex;
         };
 
         devShells.default = craneLib.devShell {

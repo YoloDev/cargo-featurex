@@ -1,9 +1,9 @@
 use crate::{
-	metadata::{FeatureName, FeaturexMetadata},
 	CollectResult,
+	metadata::{FeatureName, FeaturexMetadata},
 };
 use cargo_metadata::Package;
-use error_stack::{report, ResultExt};
+use error_stack::{ResultExt, report};
 use itertools::{Itertools, Powerset};
 use lasso::{MiniSpur, Rodeo, RodeoReader};
 use std::{fmt, rc::Rc, vec};
@@ -242,7 +242,8 @@ impl FeatureSet {
 			.required
 			.iter()
 			.enumerate()
-			.filter_map(|(i, b)| b.then(|| Feature::new(&self.features[i], self)))
+			.filter(|(_, b)| *b)
+			.map(|(i, _)| Feature::new(&self.features[i], self))
 	}
 
 	pub fn permutations(&self) -> Permutations {

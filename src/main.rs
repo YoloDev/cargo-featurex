@@ -1,9 +1,9 @@
-use cargo_featurex::{feature_set::Features, workspace, Package, PackageInfo, Workspace};
+use cargo_featurex::{Package, PackageInfo, Workspace, feature_set::Features, workspace};
 use clap::Parser;
 use core::fmt;
-use error_stack::{ensure, IntoReport, ResultExt};
+use error_stack::{ResultExt, ensure};
 use itertools::Itertools;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
 	io::Write,
 	process::{Command, Stdio},
@@ -116,7 +116,7 @@ fn print_permutations_json(workspace: Workspace) -> error_stack::Result<(), Feat
 		"packages": packages,
 	});
 
-	println!("{}", json);
+	println!("{json}");
 	Ok(())
 }
 
@@ -188,20 +188,12 @@ fn run(
 
 	out
 		.set_color(ColorSpec::new().set_fg(Some(Color::Magenta)))
-		.into_report()
 		.change_context(RunError::LogError)?;
 	writeln!(out, "    ========== {}[{}] ==========", pkg.name, features)
-		.into_report()
 		.change_context(RunError::LogError)?;
-	out
-		.reset()
-		.into_report()
-		.change_context(RunError::LogError)?;
+	out.reset().change_context(RunError::LogError)?;
 
-	let result = cmd
-		.output()
-		.into_report()
-		.change_context(RunError::StartProcess)?;
+	let result = cmd.output().change_context(RunError::StartProcess)?;
 
 	ensure!(
 		result.status.success(),

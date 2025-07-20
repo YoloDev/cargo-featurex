@@ -4,8 +4,9 @@ pub(crate) mod metadata;
 pub mod feature_set;
 
 use cargo_metadata::{MetadataCommand, PackageId};
+use cargo_util_schemas::manifest::PackageName;
 use collect_result::CollectResult;
-use error_stack::{IntoReport, ResultExt};
+use error_stack::ResultExt;
 use feature_set::{FeatureSet, FeatureSetBuilder};
 use itertools::Itertools;
 use lasso::{MiniSpur, Rodeo, RodeoReader};
@@ -41,13 +42,13 @@ impl Workspace {
 
 #[derive(Debug)]
 pub struct PackageInfo {
-	pub name: String,
+	pub name: PackageName,
 	pub version: String,
 	pub id: PackageId,
 }
 
 pub struct Package {
-	pub name: String,
+	pub name: PackageName,
 	pub version: String,
 	pub id: PackageId,
 	pub manifest_path: PathBuf,
@@ -81,7 +82,7 @@ impl Package {
 }
 
 struct PackageBuilder {
-	name: String,
+	name: PackageName,
 	version: String,
 	id: PackageId,
 	manifest_path: PathBuf,
@@ -145,10 +146,7 @@ pub fn workspace(
 		metadata.manifest_path(manifest_path);
 	}
 
-	let metadata = metadata
-		.exec()
-		.into_report()
-		.change_context(GetWorkspaceError)?;
+	let metadata = metadata.exec().change_context(GetWorkspaceError)?;
 
 	let metadata = Rc::new(metadata);
 	let mut strings = Rodeo::new();
@@ -159,12 +157,8 @@ pub fn workspace(
 	let packages = metadata
 		.packages
 		.iter()
-		.filter_map(|pkg| {
-			metadata
-				.workspace_members
-				.contains(&pkg.id)
-				.then(|| Package::builder(&mut strings, pkg, &workspace_metadata))
-		})
+		.filter(|pkg| metadata.workspace_members.contains(&pkg.id))
+		.map(|pkg| Package::builder(&mut strings, pkg, &workspace_metadata))
 		.collect::<CollectResult<Vec<_>, _>>()
 		.into_result()
 		.change_context(GetWorkspaceError)?;

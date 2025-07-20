@@ -1,4 +1,4 @@
-use error_stack::{IntoReport, ResultExt};
+use error_stack::ResultExt;
 use lasso::{MiniSpur, Rodeo};
 use serde::Deserialize;
 use thiserror::Error;
@@ -25,9 +25,8 @@ impl FeaturexMetadata {
 		match metadata {
 			None => Ok(Self::default()),
 			Some(metadata) => {
-				let value: SerdeProxy = serde_json::from_value(metadata.clone())
-					.into_report()
-					.change_context(FeaturexMetadataError)?;
+				let value: SerdeProxy =
+					serde_json::from_value(metadata.clone()).change_context(FeaturexMetadataError)?;
 
 				let required = parse_features(value.required, strings);
 				let ignored = parse_features(value.ignored, strings);

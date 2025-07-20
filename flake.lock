@@ -336,8 +336,7 @@
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
         "omnix": "omnix",
-        "pre-commit-hooks": "pre-commit-hooks",
-        "rust-overlay": "rust-overlay_2"
+        "pre-commit-hooks": "pre-commit-hooks"
       }
     },
     "rust-flake": {
@@ -377,26 +376,6 @@
         "owner": "oxalica",
         "repo": "rust-overlay",
         "rev": "5d1865c0da63b4c949f383d982b6b43519946e8f",
-        "type": "github"
-      },
-      "original": {
-        "owner": "oxalica",
-        "repo": "rust-overlay",
-        "type": "github"
-      }
-    },
-    "rust-overlay_2": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1752979888,
-        "narHash": "sha256-qRRP3QavbwW0o+LOh31QNEfCgPlzK5SKlWALUJL6T7E=",
-        "owner": "oxalica",
-        "repo": "rust-overlay",
-        "rev": "95719de18aefa63a624bf75a1ff98744b089ec12",
         "type": "github"
       },
       "original": {

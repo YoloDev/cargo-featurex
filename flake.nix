@@ -18,11 +18,6 @@
       url = "github:ipetkov/crane";
     };
 
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     omnix = {
       url = "github:juspay/omnix";
       # We do not follow nixpkgs here, because then we can't use the omnix cache
@@ -36,7 +31,6 @@
       flake-utils,
       pre-commit-hooks,
       crane,
-      rust-overlay,
       omnix,
       nixpkgs,
     }:
@@ -46,15 +40,13 @@
         pkgs = (import nixpkgs) {
           inherit system;
           overlays = [
-            (import rust-overlay)
             (final: prev: {
               inherit (omnix.packages.${final.system}) omnix-cli;
             })
           ];
         };
         lib = pkgs.lib;
-        toolchain = pkgs.rust-bin.stable.latest.default;
-        craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
+        craneLib = crane.mkLib pkgs;
         preCommitHooksLib = pre-commit-hooks.lib.${system};
 
         # Common arguments can be set here to avoid repeating them later
@@ -93,7 +85,6 @@
 
             clippy = {
               enable = true;
-              package = toolchain;
               settings.denyWarnings = true;
               settings.extraArgs = "--all";
               settings.offline = false;

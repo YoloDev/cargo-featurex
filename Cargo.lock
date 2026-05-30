@@ -126,9 +126,9 @@ dependencies = [
 
 [[package]]
 name = "cargo-util-schemas"
-version = "0.13.1"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fb0eba34f25fc0e8f0b7f7ac2aad4343301466512928c8435b56253f2d7899b"
+checksum = "37156912bbbffb4d28a143546837050f267c218c0862258385d51a482e6646f2"
 dependencies = [
  "jiff",
  "semver",
